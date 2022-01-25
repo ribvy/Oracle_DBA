@@ -1,0 +1,135 @@
+1. download Oracle database 19c client file form :
+
+https://www.oracle.com/webapps/redirect/signon?nexturl=https://download.oracle.com/otn/linux/oracle19c/190000/LINUX.X64_193000_client.zip
+
+to ansible control server .
+
+2.
+
+create ansible inventory file : the list of server where 19c client will be installed .
+
+host_inv
+
+[appserver]
+linux_host22 ansible_host=10.20.86.60 ansible_connection=ssh ansible_user=root ansible_ssh_pass=att@123
+
+3.
+
+ create client install response file :
+
+/home/ansible/client_19c.rsp
+
+client_19c.rsp
+
+#-------------------------------------------------------------------------------
+# Unix group to be set for the inventory directory.
+#-------------------------------------------------------------------------------
+UNIX_GROUP_NAME=oinstall
+#-------------------------------------------------------------------------------
+# Inventory location.
+#-------------------------------------------------------------------------------
+INVENTORY_LOCATION=/oracle/app/oraInventory
+#-------------------------------------------------------------------------------
+# Complete path of the Oracle Home
+#-------------------------------------------------------------------------------
+ORACLE_HOME=/oracle/app/oracle/product/19c/client_1
+#-------------------------------------------------------------------------------
+# Complete path of the Oracle Base.
+#-------------------------------------------------------------------------------
+ORACLE_BASE=/oracle/app/oracle
+oracle.install.client.installType=Administrator
+
+4.
+Create ansible playbook :
+
+oracle_client_installation.yml
+
+- hosts: appserver
+  strategy: free
+  user: vygantas
+  become: yes
+  become_method: su
+  become_user: oracle
+  tasks:
+    - name: check existance of mount point
+      command: mountpoint -q /oracle
+      register: volume_stat
+      failed_when: False
+    - name: Copy client software
+      unarchive: src=/oracle/LINUX.X64_193000_client.zip dest=/oracle/
+    - name: Copy response file
+      copy: src=/home/ansible/client_19c.rsp dest=/oracle mode=0777
+    - name: Install Oracle Client
+      command: "/oracle/client/runInstaller -silent -showProgress -ignorePrereq -ignoreSysPrereqs -waitforcompletion -responseFile /oracle/client_19c.rsp"
+      register: client_runinstaller_output
+      failed_when: "'Successfully Setup Software' not in client_runinstaller_output.stdout"
+
+
+
+4. execute ansible playbook :
+
+ansible-playbook oracle_client_installation.yml -i /home/ansible/ansible-scipts/host_inv
+
+
+2.
+
+create sqlplus script :
+
+create_tab.sql :
+
+create table test(i int , data1 date, pav varchar2(25));
+
+Declare 
+ sk number ;
+begin
+ for i in 1..1000000 loop
+   insert into test values(i,sysdate,'skiacius='||i);
+  end loop;
+ commit ;
+end ;
+
+  
+---
+- hosts: appserver
+- tasks:
+    - name: Execute table.sql using sqlplus 
+      shell: $ORACLE_HOME/bin/sqlplus -s username/password@connect @create_tab.sql
+      environment:
+        ORACLE_HOME: "{{oracle_home_path}}"
+        LD_LIBRARY_PATH: "{{ld_library_path}}"
+        PATH: "{{bin_path}}"
+      args:
+        chdir: "{{sql_path}}" 
+      become: true
+      become_method: su
+      become_user: oracle
+
+3.
+sqlfile.sql
+
+
+select * from t where rownum<=100;
+
+
+---
+- hosts: appserver
+- tasks:
+    - set_fact:
+        execute_command: "$ORACLE_HOME/bin/sqlplus -s username/password@connect @sqlfile.sql"
+
+    - name: Get Object_details 
+      shell: "echo exit | {{ execute_command }} >> ./Oracle_Output.csv"
+      environment:
+        ORACLE_HOME: "{{ Oracle_DBServer }}"
+        ORACLE_SID: "{{ Oracle_SID }}"
+
+
+
+
+4.
+
+- hosts: appserver
+  tasks:    
+   - name: Copy Remote-To-Remote (from serverA to serverB)
+     synchronize: src=./Oracle_Output.csv dest=/tmp/gathered_data.csv
+     delegate_to: ansible_srv
