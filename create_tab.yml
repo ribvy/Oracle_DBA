@@ -1,0 +1,9 @@
+---
+hosts: appserver
+tasks:
+ - name: Running oracle script
+   shell: "sqlplus -s username/password@connect @create_tab.sql"
+   become: yes
+   become_method: sudo
+   become_flags: -i
+   become_user: oracle

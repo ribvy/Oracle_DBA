@@ -1,0 +1,19 @@
+- hosts: appserver
+  strategy: free
+  user: vygantas
+  become: yes
+  become_method: su
+  become_user: oracle
+  tasks:
+    - name: check existance of mount point
+      command: mountpoint -q /oracle
+      register: volume_stat
+      failed_when: False
+    - name: Copy client software
+      unarchive: src=/oracle/LINUX.X64_193000_client.zip dest=/oracle/
+    - name: Copy response file
+      copy: src=/home/ansible/client_19c.rsp dest=/oracle mode=0777
+    - name: Install Oracle Client
+      command: "/oracle/client/runInstaller -silent -showProgress -ignorePrereq -ignoreSysPrereqs -waitforcompletion -responseFile /oracle/client_19c.rsp"
+      register: client_runinstaller_output
+      failed_when: "'Successfully Setup Software' not in client_runinstaller_output.stdout"

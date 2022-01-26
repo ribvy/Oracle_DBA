@@ -1,0 +1,5 @@
+- hosts: appserver
+  tasks:    
+   - name: Copy Remote-To-Remote (from serverA to serverB)
+     synchronize: src=./Oracle_Output.csv dest=/tmp/gathered_data.csv
+     delegate_to: ansible_srv

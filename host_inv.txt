@@ -1,0 +1,2 @@
+[appserver]
+linux_host22 ansible_host=10.20.86.60 ansible_connection=ssh ansible_user=root ansible_ssh_pass=att@123
